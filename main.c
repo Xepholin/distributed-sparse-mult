@@ -154,6 +154,7 @@ int main(int argc, char *argv[]) {
     int rank = 0;
     int n_ranks = 0;
     int size = 0;
+    int nonzeros = 0;
     int last_rank = 0;
 
     CSR *a = (CSR *)malloc(sizeof(CSR));
@@ -171,6 +172,7 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
         import(a, path);
         size = a->n;
+        nonzeros = a->total_values;
 
         int n_mod = size % n_ranks;
         int n_div = size / n_ranks;
@@ -255,7 +257,6 @@ int main(int argc, char *argv[]) {
             a->row = (int *)malloc(n_rows[rank] * sizeof(int));
         }
 
-        // for (int i = 0; i < r; i++) {
         MPI_Scatterv(a->row, n_rows, offset_rows, MPI_INT, a->row, n_rows[rank], MPI_INT, 0, NEW_WORLD);
 
         a->total_values = a->row[a->n] - a->row[0];
@@ -284,7 +285,7 @@ int main(int argc, char *argv[]) {
             clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
             MPI_Barrier(NEW_WORLD);
 
-            mpi_elapsed_loc += (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec);
+            mpi_elapsed_loc += ((double)t2.tv_sec - (double)t1.tv_sec) + ((double)t2.tv_nsec - (double)t1.tv_nsec);
         }
 
         for (int i = 0; i < n_ranks; ++i) {
@@ -296,13 +297,15 @@ int main(int argc, char *argv[]) {
 
         if (rank == 0) {
             a->n = size;
+            a->total_values = nonzeros;
+
             for (int i = 0; i < r; i++) {
                 clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
                 dgemv(a, x, b);
 
                 clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-                seq_elapsed += (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec);
+                seq_elapsed += ((double)t2.tv_sec - (double)t1.tv_sec) + ((double)t2.tv_nsec - (double)t1.tv_nsec);
             }
         }
 
@@ -333,8 +336,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            printf("\nParallel elpased: %lfns\n", elapsed_glob / (double)r);
-            printf("Sequential elpased: %lfns\n", seq_elapsed / (double)r);
+            printf("\nParallel elpased: %lf ns\n", (elapsed_glob / (double)r) * 10e-9);
+            printf("Sequential elpased: %lf ns\n", (seq_elapsed / (double)r) * 10e-9);
         }
 
         free(a->row);
@@ -344,6 +347,7 @@ int main(int argc, char *argv[]) {
         free(x);
         free(b_loc);
         free(b_glob);
+        free(b);
 
         MPI_Comm_free(&NEW_WORLD);
     }
