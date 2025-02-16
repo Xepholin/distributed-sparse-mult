@@ -66,6 +66,8 @@ void init_matrix_r(int n, double a[n], char m) {
 }
 
 void import(CSR *a, const char *path) {
+    printf("\nImport matrix %s ...\n", path);
+
     FILE *file = fopen(path, "r");
     if (!file) {
         perror("Failed opening file");
@@ -119,7 +121,7 @@ void import(CSR *a, const char *path) {
     fclose(file);
 }
 
-void dgemv(const CSR *a, const double *x, double *b) {
+void mpi_dgemv(const CSR *a, const double *x, double *b) {
     int begin = a->begin;
     int count = 0;
     int n = a->n;
@@ -129,6 +131,22 @@ void dgemv(const CSR *a, const double *x, double *b) {
 
         for (int j = a->row[count]; j < a->row[count + 1]; ++j) {
             sum += a->values[j] * x[begin + i];
+        }
+
+        b[i] = sum;
+        count++;
+    }
+}
+
+void dgemv(const CSR *a, double *x, double *b) {
+    int count = 0;
+    int n = a->n;
+
+    for (int i = 0; i < n; ++i) {
+        double sum = 0.0;
+
+        for (int j = a->row[count]; j < a->row[count + 1]; ++j) {
+            sum += a->values[j] * x[i];
         }
 
         b[i] = sum;
@@ -201,6 +219,8 @@ int main(int argc, char *argv[]) {
                 break;
             }
         }
+
+        printf("Matrix %dx%d with %d values\n\n", size, size, a->total_values);
     }
 
     MPI_Bcast(&last_rank, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -217,11 +237,13 @@ int main(int argc, char *argv[]) {
         double *x;
         double *b_loc;
         double *b_glob;
+        double *b;
 
         int n = 0;
 
-        double elapsed_loc = 0.0;
+        double mpi_elapsed_loc = 0.0;
         double elapsed_glob = 0.0;
+        double seq_elapsed = 0.0;
         struct timespec t1, t2;
 
         MPI_Bcast(&size, 1, MPI_INT, 0, NEW_WORLD);
@@ -238,21 +260,23 @@ int main(int argc, char *argv[]) {
         x = (double *)malloc(size * sizeof(double));
         b_glob = (double *)malloc(size * sizeof(double));
         b_loc = (double *)malloc(n * sizeof(double));
+        b = (double *)malloc(size * sizeof(double));
 
         init_matrix_r(size, x, 'r');
         init_matrix_r(size, b_glob, 'z');
         init_matrix_r(n, b_loc, 'z');
+        init_matrix_r(size, b, 'z');
 
         if (rank != 0) {
             a->row = (int *)malloc(n_rows[rank] * sizeof(int));
         }
 
-        clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
-
         // for (int i = 0; i < r; i++) {
         MPI_Scatterv(a->row, n_rows, offset_rows, MPI_INT, a->row, n_rows[rank], MPI_INT, 0, NEW_WORLD);
 
         a->total_values = a->row[a->n] - a->row[0];
+
+        printf("Process %d: processing of %d values over %d rows.\n", rank, a->total_values, a->n);
 
         if (rank != 0) {
             int temp = a->row[0];
@@ -268,27 +292,65 @@ int main(int argc, char *argv[]) {
         MPI_Scatterv(a->col, sendcounts, offset, MPI_INT, a->col, sendcounts[rank], MPI_INT, 0, NEW_WORLD);
         MPI_Scatterv(a->values, sendcounts, offset, MPI_DOUBLE, a->values, sendcounts[rank], MPI_DOUBLE, 0, NEW_WORLD);
 
-        dgemv(a, x, b_loc);
+        for (int i = 0; i < r; ++i) {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
+
+            mpi_dgemv(a, x, b_loc);
+
+            clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
+            MPI_Barrier(NEW_WORLD);
+
+            mpi_elapsed_loc += (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec);
+        }
 
         for (int i = 0; i < n_ranks; ++i) {
             n_rows[i]--;
         }
 
         MPI_Gatherv(b_loc, a->n, MPI_DOUBLE, b_glob, n_rows, offset_rows, MPI_DOUBLE, 0, NEW_WORLD);
-        // }
-
-        clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-        elapsed_loc = (double)(t2.tv_nsec - t1.tv_nsec) /*/ (double)r*/;
-
-        MPI_Reduce(&elapsed_loc, &elapsed_glob, 1, MPI_DOUBLE, MPI_SUM, 0, NEW_WORLD);
+        MPI_Reduce(&mpi_elapsed_loc, &elapsed_glob, 1, MPI_DOUBLE, MPI_SUM, 0, NEW_WORLD);
 
         if (rank == 0) {
+            a->n = size;
+            for (int i = 0; i < r; i++) {
+                clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
+
+                dgemv(a, x, b);
+
+                clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
+                seq_elapsed += (t2.tv_sec - t1.tv_sec) + (t2.tv_nsec - t1.tv_nsec);
+            }
+        }
+
+        if (rank == 0) {
+            int count = 0;
             for (int i = 0; i < size; ++i) {
-                printf("%f ", b_glob[i]);
+                if (b_glob[i] == b[i]) {
+                    count++;
+                } else {
+                    printf("%f %f\n", b_glob[i], b[i]);
+                }
             }
 
-            printf("\n");
-            printf("elpased: %lfs\n", elapsed_glob * 1e-9);
+            printf("\nValidation DGEMV...\n");
+
+            if (count == size) {
+                printf("DGEMV passed.\n");
+            } else {
+                printf("DGEMV failed.\n");
+                printf("Number of wrong element: %d/%d\n", count, size);
+
+                for (int i = 0; i < size; ++i) {
+                    if (b_glob[i] == b[i]) {
+                        continue;
+                    } else {
+                        printf("Element %d: %f != %f\n", i, b_glob[i], b[i]);
+                    }
+                }
+            }
+
+            printf("\nParallel elpased: %lfns\n", elapsed_glob / (double)r);
+            printf("Sequential elpased: %lfns\n", seq_elapsed / (double)r);
         }
 
         free(a->row);

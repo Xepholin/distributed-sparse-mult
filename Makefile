@@ -7,12 +7,12 @@ LFLAGS=-lm -fopenmp -lmpi
 
 FILES=dgemv_mpi.c
 
-NPROCESS=2
+NPROCESS=4
 
 all: smult
 
 run: smult
-	mpirun -n $(NPROCESS) ./smult data/bcsstk03.mtx 10
+	mpirun -n $(NPROCESS) ./smult data/bcsstk03.mtx 100
 
 smult: $(FILES)
 	$(CC) $(CFLAGS) $(OFLAGS) $(FILES) -o $@ $(LFLAGS)
