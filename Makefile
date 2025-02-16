@@ -5,7 +5,7 @@ OFLAGS=-O3
 
 LFLAGS=-lm -fopenmp -lmpi
 
-FILES=dgemv_mpi.c
+FILES=main.c
 
 NPROCESS=4
 

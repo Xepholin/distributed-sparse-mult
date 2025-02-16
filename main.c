@@ -139,6 +139,7 @@ void mpi_dgemv(const CSR *a, const double *x, double *b) {
 }
 
 void dgemv(const CSR *a, double *x, double *b) {
+    int begin = a->begin;
     int count = 0;
     int n = a->n;
 
@@ -146,7 +147,7 @@ void dgemv(const CSR *a, double *x, double *b) {
         double sum = 0.0;
 
         for (int j = a->row[count]; j < a->row[count + 1]; ++j) {
-            sum += a->values[j] * x[i];
+            sum += a->values[j] * x[begin + i];
         }
 
         b[i] = sum;
