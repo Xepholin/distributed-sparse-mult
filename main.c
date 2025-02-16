@@ -121,23 +121,6 @@ void import(CSR *a, const char *path) {
     fclose(file);
 }
 
-void mpi_dgemv(const CSR *a, const double *x, double *b) {
-    int begin = a->begin;
-    int count = 0;
-    int n = a->n;
-
-    for (int i = 0; i < n; ++i) {
-        double sum = 0.0;
-
-        for (int j = a->row[count]; j < a->row[count + 1]; ++j) {
-            sum += a->values[j] * x[begin + i];
-        }
-
-        b[i] = sum;
-        count++;
-    }
-}
-
 void dgemv(const CSR *a, double *x, double *b) {
     int begin = a->begin;
     int count = 0;
@@ -296,7 +279,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < r; ++i) {
             clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
 
-            mpi_dgemv(a, x, b_loc);
+            dgemv(a, x, b_loc);
 
             clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
             MPI_Barrier(NEW_WORLD);
