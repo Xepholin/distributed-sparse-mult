@@ -336,8 +336,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            printf("\nParallel elpased: %lf ns\n", (elapsed_glob / (double)r) * 10e-9);
-            printf("Sequential elpased: %lf ns\n", (seq_elapsed / (double)r) * 10e-9);
+            printf("\nParallel elpased: %lf s\n", (elapsed_glob / (double)r) * 10e-9);
+            printf("Sequential elpased: %lf s\n", (seq_elapsed / (double)r) * 10e-9);
         }
 
         free(a->row);
