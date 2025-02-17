@@ -3,7 +3,7 @@ CFLAGS=-g -Wall -Wextra -march=native
 
 OFLAGS=-O3
 
-LFLAGS=-lm -fopenmp -lmpi
+LFLAGS=-lmpi
 
 FILES=main.c
 
