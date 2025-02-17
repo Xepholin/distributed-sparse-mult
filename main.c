@@ -66,8 +66,6 @@ void init_matrix_r(int n, double a[n], char m) {
 }
 
 void import(CSR *a, const char *path) {
-    printf("\nImport matrix %s ...\n", path);
-
     FILE *file = fopen(path, "r");
     if (!file) {
         perror("Failed opening file");
@@ -170,6 +168,7 @@ int main(int argc, char *argv[]) {
     a->rank = rank;
 
     if (rank == 0) {
+        printf("\nImporting matrix %s ...\n", path);
         import(a, path);
         size = a->n;
         nonzeros = a->total_values;
