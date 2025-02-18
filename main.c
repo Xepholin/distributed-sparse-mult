@@ -20,6 +20,10 @@ typedef struct matrix_csr {
 
 void print_csr(const CSR *a) {
     printf("rank %d\n", a->rank);
+
+    printf("n: %d\n", a->n);
+    printf("nonzeros: %d\n", a->total_values);
+
     printf("row\n");
 
     for (int i = 0; i < a->n + 1; ++i) {
@@ -56,9 +60,16 @@ void init_matrix_r(int n, double a[n], char m) {
             }
         } else {  // Same value per entry
             if (m == 'c' || m == 'C') {
-                double c = (double)RAND_MAX / (double)rand();
+                // double c = (double)RAND_MAX / (double)rand();
+                double c = 1.0;
                 for (int i = 0; i < n; i++) {
                     a[i] = c;
+                }
+            } else {
+                if (m == 's' || m == 'S') {
+                    for (int i = 0; i < n; ++i) {
+                        a[i] = (double)i + 1.0;
+                    }
                 }
             }
         }
@@ -227,9 +238,10 @@ int main(int argc, char *argv[]) {
         int n = 0;
 
         double mpi_elapsed_loc = 0.0;
-        double elapsed_glob = 0.0;
+        double mpi_elapsed = 0.0;
         double seq_elapsed = 0.0;
-        struct timespec t1, t2;
+        double t1 = 0.0;
+        double t2 = 0.0;
 
         MPI_Bcast(&size, 1, MPI_INT, 0, NEW_WORLD);
         MPI_Bcast(n_rows, n_ranks, MPI_INT, 0, NEW_WORLD);
@@ -247,7 +259,7 @@ int main(int argc, char *argv[]) {
         b_loc = (double *)malloc(n * sizeof(double));
         b = (double *)malloc(size * sizeof(double));
 
-        init_matrix_r(size, x, 'r');
+        init_matrix_r(size, x, 's');
         init_matrix_r(size, b_glob, 'z');
         init_matrix_r(n, b_loc, 'z');
         init_matrix_r(size, b, 'z');
@@ -256,6 +268,7 @@ int main(int argc, char *argv[]) {
             a->row = (int *)malloc(n_rows[rank] * sizeof(int));
         }
 
+        t1 = MPI_Wtime();
         MPI_Scatterv(a->row, n_rows, offset_rows, MPI_INT, a->row, n_rows[rank], MPI_INT, 0, NEW_WORLD);
 
         a->total_values = a->row[a->n] - a->row[0];
@@ -276,15 +289,12 @@ int main(int argc, char *argv[]) {
         MPI_Scatterv(a->col, sendcounts, offset, MPI_INT, a->col, sendcounts[rank], MPI_INT, 0, NEW_WORLD);
         MPI_Scatterv(a->values, sendcounts, offset, MPI_DOUBLE, a->values, sendcounts[rank], MPI_DOUBLE, 0, NEW_WORLD);
 
+        if (rank == 0) {
+            printf("\nComputing ...\n");
+        }
+
         for (int i = 0; i < r; ++i) {
-            clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
-
             dgemv(a, x, b_loc);
-
-            clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-            MPI_Barrier(NEW_WORLD);
-
-            mpi_elapsed_loc += ((double)t2.tv_sec - (double)t1.tv_sec) + ((double)t2.tv_nsec - (double)t1.tv_nsec);
         }
 
         for (int i = 0; i < n_ranks; ++i) {
@@ -292,23 +302,25 @@ int main(int argc, char *argv[]) {
         }
 
         MPI_Gatherv(b_loc, a->n, MPI_DOUBLE, b_glob, n_rows, offset_rows, MPI_DOUBLE, 0, NEW_WORLD);
-        MPI_Reduce(&mpi_elapsed_loc, &elapsed_glob, 1, MPI_DOUBLE, MPI_SUM, 0, NEW_WORLD);
+        
+        t2 = MPI_Wtime();
+        mpi_elapsed_loc = t2 - t1;
+
+        MPI_Reduce(&mpi_elapsed_loc, &mpi_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, NEW_WORLD);
+        MPI_Barrier(NEW_WORLD);
 
         if (rank == 0) {
             a->n = size;
             a->total_values = nonzeros;
 
+            t1 = MPI_Wtime();
             for (int i = 0; i < r; i++) {
-                clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
-
                 dgemv(a, x, b);
-
-                clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-                seq_elapsed += ((double)t2.tv_sec - (double)t1.tv_sec) + ((double)t2.tv_nsec - (double)t1.tv_nsec);
             }
-        }
+            t2 = MPI_Wtime();
+            seq_elapsed = t2 - t1;
 
-        if (rank == 0) {
+            printf("\nChecking result...\n");
             int count = 0;
             for (int i = 0; i < size; ++i) {
                 if (b_glob[i] == b[i]) {
@@ -317,8 +329,6 @@ int main(int argc, char *argv[]) {
                     printf("%f %f\n", b_glob[i], b[i]);
                 }
             }
-
-            printf("\nValidation DGEMV...\n");
 
             if (count == size) {
                 printf("DGEMV passed.\n");
@@ -335,8 +345,18 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            printf("\nParallel elpased: %lf s\n", (elapsed_glob / (double)r) * 10e-9);
-            printf("Sequential elpased: %lf s\n", (seq_elapsed / (double)r) * 10e-9);
+            mpi_elapsed = (mpi_elapsed / (double)r);
+            seq_elapsed = (seq_elapsed / (double)r);
+
+            if (mpi_elapsed > 1e-4) {
+                printf("\nParallel elpased: %f s\n", mpi_elapsed);
+                printf("Sequential elpased: %f s\n", seq_elapsed);
+            } else {
+                printf("\nParallel elpased: %f ns\n", mpi_elapsed * 1e9);
+                printf("Sequential elpased: %f ns\n", seq_elapsed * 1e9);
+            }
+
+            printf("Speedup: %f\n", (seq_elapsed / mpi_elapsed));
         }
 
         free(a->row);

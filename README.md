@@ -34,3 +34,4 @@ make clean
 - `main.c` : Code source principal du programme.
 - `Makefile` : Fichier pour automatiser la compilation et l'exécution.
 - `data/` : Dossier contenant les matrices d'entrée au format `.mtx`.
+- `assets/` : Dossier contenant divers fichiers tels que des données et plot.
