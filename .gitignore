@@ -1,5 +1,6 @@
 smult
-.vscode
+.vscode/
+env/
 
 # Prerequisites
 *.d
