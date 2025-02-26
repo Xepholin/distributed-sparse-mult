@@ -29,6 +29,11 @@ void import(CSR *a, const char *path) {
     a->row = (int *)malloc((rows + 1) * sizeof(int));
     a->col = (int *)malloc(nonzeros * sizeof(int));
 
+    if (a->values == NULL || a->row == NULL || a->col == NULL) {
+        perror("Error during allocations\n");
+        exit(EXIT_FAILURE);
+    }
+
     int row = 0;
     int col = 0;
     int old_row = 0;

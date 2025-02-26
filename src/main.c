@@ -28,6 +28,11 @@ int main(int argc, char *argv[]) {
 
     CSR *a = (CSR *)malloc(sizeof(CSR));
 
+    if (a == NULL) {
+        perror("Error during allocations\n");
+        exit(EXIT_FAILURE);
+    }
+
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
@@ -64,6 +69,10 @@ int main(int argc, char *argv[]) {
         double *b_loc;
         double *b_glob;
         double *b;
+        double *v;
+
+        double lambda_loc = 0.0;
+        double lambda_glob = 0.0;
 
         double mpi_elapsed_loc = 0.0;
         double mpi_elapsed = 0.0;
@@ -87,19 +96,32 @@ int main(int argc, char *argv[]) {
         b_glob = (double *)malloc(size * sizeof(double));
         b_loc = (double *)malloc(n * sizeof(double));
         b = (double *)malloc(size * sizeof(double));
+        v = (double *)malloc(size * sizeof(double));
+
+        if (x == NULL || b_glob == NULL || b_loc == NULL || b == NULL || v == NULL) {
+            perror("Error during allocations\n");
+            exit(EXIT_FAILURE);
+        }
 
         init_matrix_r(size, x, 's');
         init_matrix_r(size, b_glob, 'z');
         init_matrix_r(n, b_loc, 'z');
         init_matrix_r(size, b, 'z');
+        init_matrix_r(size, v, 'r');
 
         if (rank != 0) {
             a->row = (int *)malloc(n_rows[rank] * sizeof(int));
+
+            if (a->row == NULL) {
+                perror("Error during allocations\n");
+                exit(EXIT_FAILURE);
+            }
         }
 
         if (rank == 0) {
             printf("\nComputing ...\n");
         }
+
         MPI_Barrier(NEW_WORLD);
         t1 = MPI_Wtime();
         scatter_matrix_data(a, rank, n_rows, offset_rows, sendcounts, offset, NEW_WORLD);
@@ -118,7 +140,19 @@ int main(int argc, char *argv[]) {
         mpi_elapsed_loc = t2 - t1;
 
         MPI_Reduce(&mpi_elapsed_loc, &mpi_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, NEW_WORLD);
-        MPI_Barrier(NEW_WORLD);
+        
+        double v_norm = norm_vec(size, v);
+        if (v_norm == 0.0) {
+            perror("v norm too low\n");
+        } else {
+            double v_norm_inv = 1.0 / v_norm;
+            for (int i = 0; i < size; ++i) {
+                v[i] *= v_norm_inv;
+            }
+
+            lambda_loc = pow_iter(a, v, 1e-6, r);
+            MPI_Reduce(&lambda_loc, &lambda_glob, 1, MPI_DOUBLE, MPI_MAX, 0, NEW_WORLD);
+        }
 
         if (rank == 0) {
             double seq_elapsed = 0.0;
@@ -147,6 +181,12 @@ int main(int argc, char *argv[]) {
 
                 printf("Speedup: %f\n", (seq_elapsed / mpi_elapsed));
             }
+
+            if (lambda_glob < 0) {
+                printf("Error in Power Iteration\n");
+            } else {
+                printf("lambda value: %f\n", lambda_glob);
+            }
         }
 
         free(a->row);
@@ -157,6 +197,7 @@ int main(int argc, char *argv[]) {
         free(b_loc);
         free(b_glob);
         free(b);
+        free(v);
 
         MPI_Comm_free(&NEW_WORLD);
     }

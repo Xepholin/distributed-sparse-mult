@@ -25,4 +25,4 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(OFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
 
 clean:
-	rm -rf smult $(OBJ_DIR)
+	rm -rf smult $(OBJ_DIR)/*.o

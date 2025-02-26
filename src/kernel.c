@@ -1,22 +1,25 @@
 #include "kernel.h"
+#include "utils.h"
 
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 double norm_vec(const int n, const double a[n]) {
-    double sum = 0;
+    double max = 0.0;
 
     for (int i = 0; i < n; ++i) {
-        sum += a[i] * a[i];
+        if (fabs(a[i]) > max) {
+            max = fabs(a[i]);
+        }
     }
-
-    return sqrt(sum);
+    return max;
 }
 
 void dgemv(const CSR *a, const double *x, double *b) {
-    int begin = a->begin;
+    const int begin = a->begin;
+    const int n = a->n;
     int count = 0;
-    int n = a->n;
 
     for (int i = 0; i < n; ++i) {
         double sum = 0.0;
@@ -30,18 +33,37 @@ void dgemv(const CSR *a, const double *x, double *b) {
     }
 }
 
-void pow_iter(const CSR *a, double *b_k, const int max_iter) {
-    const int size = a->n;
-    double *b_k1 = (double *)malloc(size * sizeof(double));
+double pow_iter(const CSR *a, double *v_k, const double threshold, const int max_iter) {
+    const int n = a->n;
+    const int begin = a->begin;
+    double *v_k1 = (double *)malloc(n * sizeof(double));
 
-    for (int i = 0; i < max_iter; ++i) {
-        dgemv(a, b_k, b_k1);
-        const double b_k1_norm_inv = 1.0 / norm_vec(size, b_k1);
-
-        for (int j = 0; j < size; ++j) {
-            b_k[j] = b_k1[j] * b_k1_norm_inv;
-        }
+    if (v_k1 == NULL) {
+        return -1;
     }
 
-    free(b_k1);
+    init_matrix_r(n, v_k1, 'z');
+
+    double lambda_prev = 0.0;
+
+    for (int i = 0; i < max_iter; ++i) {
+        dgemv(a, v_k, v_k1);
+
+        double lambda = norm_vec(n, v_k1);
+
+        double v_k1_norm_inv = 1.0 / lambda;
+        for (int j = 0; j < n; ++j) {
+            v_k[begin + j] = v_k1[j] * v_k1_norm_inv;
+        }
+
+        if (fabs(lambda - lambda_prev) < threshold) {
+            free(v_k1);
+            return lambda;
+        }
+
+        lambda_prev = lambda;
+    }
+
+    free(v_k1);
+    return lambda_prev;
 }

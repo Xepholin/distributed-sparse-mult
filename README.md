@@ -40,7 +40,8 @@ make clean
 ## Structure du projet
 - `src/main.c` : Code source principal du programme.
 - `src/csr.c` : Code source de la structure de données CSR.
-- `src/kernel.c` : Code source des noyaux de calcul utilisés dans le programme.
+- `src/kernel.c` : Code source des noyaux de calcul.
+- `src/distrib.c` : Code source des fonctions pour l'implémentation distribuée.
 - `Makefile` : Fichier pour automatiser la compilation et l'exécution.
 - `mtx/` : Dossier contenant les matrices d'entrée au format `.mtx`.
 - `src/` : Dossier contenant les codes sources du programme.

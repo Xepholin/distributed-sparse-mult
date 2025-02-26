@@ -36,7 +36,7 @@ void init_matrix_r(int n, double a[n], char m) {
     // Random value per entry
     if (m == 'r' || m == 'R') {
         for (int i = 0; i < n; i++) {
-            a[i] = (double)RAND_MAX / (double)rand();
+            a[i] = (double)rand() / (double)RAND_MAX;
         }
     } else {  // Zeroing up the array
         if (m == 'z' || m == 'Z') {
@@ -45,7 +45,7 @@ void init_matrix_r(int n, double a[n], char m) {
             }
         } else {  // Same value per entry
             if (m == 'c' || m == 'C') {
-                // double c = (double)RAND_MAX / (double)rand();
+                // double c = (double)rand() / (double)RAND_MAX;
                 double c = 1.0;
                 for (int i = 0; i < n; i++) {
                     a[i] = c;
