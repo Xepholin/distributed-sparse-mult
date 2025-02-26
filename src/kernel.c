@@ -13,7 +13,7 @@ double norm_vec(const int n, const double a[n]) {
     return sqrt(sum);
 }
 
-void dgemv(const CSR *a, double *x, double *b) {
+void dgemv(const CSR *a, const double *x, double *b) {
     int begin = a->begin;
     int count = 0;
     int n = a->n;

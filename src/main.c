@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "csr.h"
+#include "distrib.h"
 #include "kernel.h"
 #include "utils.h"
 
@@ -43,37 +44,7 @@ int main(int argc, char *argv[]) {
         size = a->n;
         nonzeros = a->total_values;
 
-        int n_mod = size % n_ranks;
-        int n_div = size / n_ranks;
-
-        int cumul = 0;
-
-        for (int p = 0; p < n_ranks; ++p) {
-            n_rows[p] = n_div + (p < n_mod ? 1 : 0);
-            offset_rows[p] = cumul;
-            cumul += n_rows[p];
-
-            n_rows[p]++;
-
-            if (offset_rows[p] + n_rows[p] >= size + 1) {
-                last_rank = p;
-                break;
-            }
-        }
-
-        int index = 0;
-        for (int p = 0; p < n_ranks; ++p) {
-            int count = a->row[offset_rows[p] + n_rows[p] - 1] - a->row[offset_rows[p]];
-
-            sendcounts[p] = count;
-            offset[p] = index;
-
-            index += count;
-
-            if (sendcounts[p] + offset[p] >= a->row[size]) {
-                break;
-            }
-        }
+        last_rank = compute_partition(a, size, n_ranks, n_rows, offset_rows, sendcounts, offset);
 
         printf("Matrix %dx%d with %d values\n\n", size, size, a->total_values);
     }
@@ -94,13 +65,12 @@ int main(int argc, char *argv[]) {
         double *b_glob;
         double *b;
 
-        int n = 0;
-
         double mpi_elapsed_loc = 0.0;
         double mpi_elapsed = 0.0;
-        double seq_elapsed = 0.0;
         double t1 = 0.0;
         double t2 = 0.0;
+
+        int n = 0;
 
         MPI_Bcast(&size, 1, MPI_INT, 0, NEW_WORLD);
         MPI_Bcast(n_rows, n_ranks, MPI_INT, 0, NEW_WORLD);
@@ -127,30 +97,12 @@ int main(int argc, char *argv[]) {
             a->row = (int *)malloc(n_rows[rank] * sizeof(int));
         }
 
-        t1 = MPI_Wtime();
-        MPI_Scatterv(a->row, n_rows, offset_rows, MPI_INT, a->row, n_rows[rank], MPI_INT, 0, NEW_WORLD);
-
-        a->total_values = a->row[a->n] - a->row[0];
-
-        printf("Process %d: processing of %d values over %d rows.\n", rank, a->total_values, a->n);
-
-        if (rank != 0) {
-            int temp = a->row[0];
-
-            for (int i = 0; i < a->n + 1; ++i) {
-                a->row[i] -= temp;
-            }
-
-            a->col = (int *)malloc(a->total_values * sizeof(int));
-            a->values = (double *)malloc(a->total_values * sizeof(double));
-        }
-
-        MPI_Scatterv(a->col, sendcounts, offset, MPI_INT, a->col, sendcounts[rank], MPI_INT, 0, NEW_WORLD);
-        MPI_Scatterv(a->values, sendcounts, offset, MPI_DOUBLE, a->values, sendcounts[rank], MPI_DOUBLE, 0, NEW_WORLD);
-
         if (rank == 0) {
             printf("\nComputing ...\n");
         }
+        MPI_Barrier(NEW_WORLD);
+        t1 = MPI_Wtime();
+        scatter_matrix_data(a, rank, n_rows, offset_rows, sendcounts, offset, NEW_WORLD);
 
         for (int i = 0; i < r; ++i) {
             dgemv(a, x, b_loc);
@@ -169,6 +121,8 @@ int main(int argc, char *argv[]) {
         MPI_Barrier(NEW_WORLD);
 
         if (rank == 0) {
+            double seq_elapsed = 0.0;
+
             a->n = size;
             a->total_values = nonzeros;
 
@@ -179,43 +133,20 @@ int main(int argc, char *argv[]) {
             t2 = MPI_Wtime();
             seq_elapsed = t2 - t1;
 
-            printf("\nChecking result...\n");
-            int count = 0;
-            for (int i = 0; i < size; ++i) {
-                if (b_glob[i] == b[i]) {
-                    count++;
+            if (!check_results(size, b_glob, b)) {
+                mpi_elapsed = (mpi_elapsed / (double)r);
+                seq_elapsed = (seq_elapsed / (double)r);
+
+                if (mpi_elapsed > 1e-4) {
+                    printf("\nParallel elpased: %f s\n", mpi_elapsed);
+                    printf("Sequential elpased: %f s\n", seq_elapsed);
                 } else {
-                    printf("%f %f\n", b_glob[i], b[i]);
+                    printf("\nParallel elpased: %f ns\n", mpi_elapsed * 1e9);
+                    printf("Sequential elpased: %f ns\n", seq_elapsed * 1e9);
                 }
+
+                printf("Speedup: %f\n", (seq_elapsed / mpi_elapsed));
             }
-
-            if (count == size) {
-                printf("DGEMV passed.\n");
-            } else {
-                printf("DGEMV failed.\n");
-                printf("Number of wrong element: %d/%d\n", count, size);
-
-                for (int i = 0; i < size; ++i) {
-                    if (b_glob[i] == b[i]) {
-                        continue;
-                    } else {
-                        printf("Element %d: %f != %f\n", i, b_glob[i], b[i]);
-                    }
-                }
-            }
-
-            mpi_elapsed = (mpi_elapsed / (double)r);
-            seq_elapsed = (seq_elapsed / (double)r);
-
-            if (mpi_elapsed > 1e-4) {
-                printf("\nParallel elpased: %f s\n", mpi_elapsed);
-                printf("Sequential elpased: %f s\n", seq_elapsed);
-            } else {
-                printf("\nParallel elpased: %f ns\n", mpi_elapsed * 1e9);
-                printf("Sequential elpased: %f ns\n", seq_elapsed * 1e9);
-            }
-
-            printf("Speedup: %f\n", (seq_elapsed / mpi_elapsed));
         }
 
         free(a->row);

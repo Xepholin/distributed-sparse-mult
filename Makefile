@@ -7,7 +7,7 @@ SRC_DIR = src
 INCLUDE_DIR = include
 OBJ_DIR = obj
 
-FILES = main.c csr.c kernel.c utils.c
+FILES = main.c csr.c kernel.c distrib.c utils.c
 
 NPROCESS = 4
 
