@@ -14,6 +14,13 @@ make
 ```
 Cela génère un exécutable nommé `smult`.
 
+## Environnement Python (Optionnel)
+Un environnement Python peut être crée pour la génération des graphes, avec :
+```sh
+python -m venv env
+source env/bin/activate
+```
+
 ## Exécution
 Le programme s'exécute en spécifiant un nombre de processus et un fichier de matrice :
 ```sh
@@ -40,4 +47,3 @@ make clean
 - `include/` : Dossier contenant les headers du programme.
 - `obj/` : Dossier contenant les fichiers objets du programme.
 - `assets/` : Dossier contenant divers fichiers tels que des données et plot.
-- `env/` : L'environnement Python 3.9.
