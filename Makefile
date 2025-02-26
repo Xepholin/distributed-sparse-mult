@@ -1,22 +1,28 @@
-CC=mpicc
-CFLAGS=-g -Wall -Wextra -march=native
+CC = mpicc
+CFLAGS = -lmpi -lm
+OFLAGS = -g -Wall -Wextra -O3 -march=native -funroll-loops
+LFLAGS = -Iinclude
 
-OFLAGS=-O3
+SRC_DIR = src
+INCLUDE_DIR = include
+OBJ_DIR = obj
 
-LFLAGS=-lmpi
+FILES = main.c csr.c kernel.c utils.c
 
-FILES=main.c
+NPROCESS = 4
 
-NPROCESS=4
+OBJS = $(FILES:%.c=$(OBJ_DIR)/%.o)
 
 all: smult
 
-run: smult
-	mpirun -n $(NPROCESS) ./smult data/bcsstk03.mtx 100
+smult: $(OBJS)
+	$(CC) $(CFLAGS) $(OFLAGS) $(OBJS) -o $@ $(LFLAGS)
 
-smult: $(FILES)
-	$(CC) $(CFLAGS) $(OFLAGS) $(FILES) -o $@ $(LFLAGS)
+run: smult
+	mpirun -n $(NPROCESS) ./smult mtx/twotone.mtx 100
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(OFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
 
 clean:
-	@rm -Rf smult
-
+	rm -rf smult $(OBJ_DIR)

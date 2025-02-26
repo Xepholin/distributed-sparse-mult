@@ -17,11 +17,11 @@ Cela génère un exécutable nommé `smult`.
 ## Exécution
 Le programme s'exécute en spécifiant un nombre de processus et un fichier de matrice :
 ```sh
-mpirun -n 4 ./smult data/bcsstk03.mtx 100
+mpirun -n 4 ./smult mtx/bcsstk03.mtx 100
 ```
 ou :
 - `4` est le nombre de processus MPI à utiliser.
-- `data/bcsstk03.mtx` est le fichier de la matrice au format `.mtx`.
+- `mtx/bcsstk03.mtx` est le fichier de la matrice au format `.mtx`.
 - `100` est un paramètre supplémentaire (à adapter selon l'implémentation).
 
 ## Nettoyage
@@ -31,7 +31,13 @@ make clean
 ```
 
 ## Structure du projet
-- `main.c` : Code source principal du programme.
+- `src/main.c` : Code source principal du programme.
+- `src/csr.c` : Code source de la structure de données CSR.
+- `src/kernel.c` : Code source des noyaux de calcul utilisés dans le programme.
 - `Makefile` : Fichier pour automatiser la compilation et l'exécution.
-- `data/` : Dossier contenant les matrices d'entrée au format `.mtx`.
+- `mtx/` : Dossier contenant les matrices d'entrée au format `.mtx`.
+- `src/` : Dossier contenant les codes sources du programme.
+- `include/` : Dossier contenant les headers du programme.
+- `obj/` : Dossier contenant les fichiers objets du programme.
 - `assets/` : Dossier contenant divers fichiers tels que des données et plot.
+- `env/` : L'environnement Python 3.9.
