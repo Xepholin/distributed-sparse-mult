@@ -21,6 +21,9 @@ smult: $(OBJS)
 run: smult
 	mpirun -n $(NPROCESS) ./smult mtx/twotone.mtx 100
 
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(OFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
 
